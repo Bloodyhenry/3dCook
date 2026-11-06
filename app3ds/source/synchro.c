@@ -4,13 +4,17 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "catalogue.h"
 #include "fichiers.h"
+#include "json.h"
 #include "menu.h"
+#include "photo.h"
 #include "recette_json.h"
 
 static char reponse[TAILLE_FICHIER_MAX];
+static char reponse_photo[PHOTO_TAILLE_MAX + 16];
 static Recette recette;
 static Menu menu;
 
@@ -52,8 +56,9 @@ static void nettoyer(const char *dossier, BilanSynchro *b)
         const char *point = strchr(nom, '.');
         if (!point || nom[0] == '.' || strlen(nom) >= TAILLE_NOM_FICHIER) continue;
         bool json = strcmp(point, ".json") == 0;
-        bool photo = strcmp(point, ".jpg") == 0;
-        bool reste = strcmp(point, ".json.tmp") == 0;   /* écriture interrompue */
+        bool photo = strcmp(point, ".jpg") == 0 || strcmp(point, PHOTO_EXTENSION) == 0;
+        bool reste = strcmp(point, ".json.tmp") == 0
+                     || strcmp(point, PHOTO_EXTENSION ".tmp") == 0;   /* écriture interrompue */
         if (!json && !photo && !reste) continue;
         if (reste || !au_menu(nom, (int)(point - nom))) {
             snprintf(a_supprimer[n++], TAILLE_NOM_FICHIER, "%.63s", nom);
@@ -67,6 +72,33 @@ static void nettoyer(const char *dossier, BilanSynchro *b)
         snprintf(chemin, sizeof(chemin), "%.200s/%.63s", dossier, a_supprimer[i]);
         remove(chemin);
     }
+}
+
+static bool existe(const char *chemin)
+{
+    struct stat st;
+    return stat(chemin, &st) == 0;
+}
+
+/* Photo de la recette : téléchargée si la recette est nouvelle ou si elle manque. */
+static void photo(const char *adresse, const char *dossier, const EntreeMenu *e, bool recette_neuve,
+                  FonctionTelecharger telecharger, void *contexte, BilanSynchro *b)
+{
+    char chemin[300], url[300], erreur[160];
+    snprintf(chemin, sizeof(chemin), "%s/%s%s", dossier, e->id, PHOTO_EXTENSION);
+    if (!e->image) {
+        remove(chemin);   /* la recette n'a plus de photo */
+        return;
+    }
+    if (!recette_neuve && existe(chemin)) return;
+    snprintf(url, sizeof(url), "%s/recipes/%s/image.rgb565", adresse, e->id);
+    int lg = telecharger(contexte, url, reponse_photo, sizeof(reponse_photo), erreur, sizeof(erreur));
+    int largeur, hauteur;
+    if (lg > 0 && photo_valider((const uint8_t *)reponse_photo, lg, &largeur, &hauteur)
+        && fichier_ecrire_atomique(chemin, reponse_photo, lg))
+        b->photos++;
+    else
+        b->photos_echecs++;
 }
 
 void synchroniser(const char *adresse, const char *dossier, const char *chemin_menu,
@@ -100,6 +132,7 @@ void synchroniser(const char *adresse, const char *dossier, const char *chemin_m
         if (progres) progres(contexte, k, menu.nb, e->titre);
         if (deja_a_jour(dossier, e)) {
             b->a_jour++;
+            photo(adresse, dossier, e, false, telecharger, contexte, b);
             continue;
         }
         snprintf(url, sizeof(url), "%s/recipes/%s", adresse, e->id);
@@ -120,6 +153,7 @@ void synchroniser(const char *adresse, const char *dossier, const char *chemin_m
         snprintf(chemin, sizeof(chemin), "%s/%s.json", dossier, e->id);
         if (fichier_ecrire_atomique(chemin, reponse, lg)) {
             b->telechargees++;
+            photo(adresse, dossier, e, true, telecharger, contexte, b);
         } else {
             b->echecs++;
             noter_erreur(b, "%s : %s", e->titre, "écriture impossible sur la carte SD");
@@ -129,6 +163,15 @@ void synchroniser(const char *adresse, const char *dossier, const char *chemin_m
     /* 3. Ménage. */
     nettoyer(dossier, b);
     if (progres) progres(contexte, menu.nb, menu.nb, "");
+}
+
+bool synchro_erreur_passerelle(const char *corps, int longueur, char *sortie, int taille)
+{
+    JsonJeton jetons[16];
+    if (json_analyser(corps, longueur, jetons, 16, NULL) < 1 || jetons[0].type != JSON_OBJET)
+        return false;
+    return json_texte(corps, jetons, json_cle(corps, jetons, 0, "erreur"), sortie, taille)
+           && sortie[0];
 }
 
 void synchro_resume(const BilanSynchro *b, char *sortie, int taille)
@@ -144,5 +187,8 @@ void synchro_resume(const BilanSynchro *b, char *sortie, int taille)
                       b->telechargees > 1 ? "s" : "");
     if (b->echecs && n < taille)
         n += snprintf(sortie + n, (size_t)(taille - n), ", %d en échec (%s)", b->echecs, b->erreur);
+    if (b->photos_echecs && n < taille)
+        n += snprintf(sortie + n, (size_t)(taille - n), ", %d photo%s non reçue%s", b->photos_echecs,
+                      b->photos_echecs > 1 ? "s" : "", b->photos_echecs > 1 ? "s" : "");
     if (n < taille) snprintf(sortie + n, (size_t)(taille - n), ".");
 }

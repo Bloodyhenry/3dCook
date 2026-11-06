@@ -34,6 +34,9 @@ services:
   recettes3ds:
     build: .
     image: recettes3ds:latest
+    # Reconstruit l'image à chaque « Construire » : sinon Container Manager
+    # réutilise l'ancienne image et ignore le code mis à jour.
+    pull_policy: build
     container_name: recettes3ds
     restart: unless-stopped
     depends_on:
@@ -48,6 +51,7 @@ services:
       MEALIE_URL: http://mealie:9000
       MEALIE_JETON: ${MEALIE_JETON}
       MEALIE_LIEN: http://${NAS_ADRESSE}:9925
+      MENU_MEALIE: ${MENU_MEALIE:-favoris}
       MENU_JOURS: ${MENU_JOURS:-7}
       TZ: Europe/Paris
 

@@ -19,7 +19,7 @@ The app only talks to the gateway, never directly to Mealie.
 - Portion scaling on the touch screen
 - Several timers at once, with a sound alarm, a blinking LED and sleep mode blocked while cooking
 - Next step by blowing into the microphone; hand-wave detection with the camera is in progress
-- The menu comes from the Mealie meal planner and syncs over Wi-Fi; recipes are kept on the SD
+- The menu comes from your Mealie favorites (or its meal planner) and syncs over Wi-Fi; recipes are kept on the SD
   card so you can cook offline
 
 ## Quick start

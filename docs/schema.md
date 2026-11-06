@@ -21,6 +21,10 @@ en général 2 Ko (5,6 Ko au maximum dans la base actuelle).
 - `id` : texte de 1 à 32 caractères `[A-Za-z0-9_-]`. Avec Mealie, c'est l'UUID de la recette
   sans tirets. Ce texte peut servir tel quel de nom de fichier dans le cache SD.
 
+Avec Mealie, le menu est par défaut la liste des recettes **favorites** (cœur) du compte du jeton,
+triées par titre, sans les champs ci-dessous. Avec `MENU_MEALIE=planning`, il reprend le planning
+de repas, et chaque entrée a aussi :
+
 Champs facultatifs, présents quand le menu vient d'un planning de repas (Mealie) :
 
 | Champ | Exemple | Description |
@@ -83,6 +87,20 @@ La 3DS utilise alors son cache.
 
 JPEG baseline (non progressif), qualité 80, au plus 400×240, environ 15 à 30 Ko.
 La passerelle répond 404 si la recette n'a pas de photo (`"image": false`).
+
+## `GET /recipes/<id>/image.rgb565`
+
+La même photo, déjà convertie pour le GPU de la 3DS, qui n'a pas de décodeur JPEG :
+
+| Octets | Contenu |
+|---|---|
+| 0-3 | `R565` |
+| 4-5 | largeur (u16 petit-boutiste, au plus 400) |
+| 6-7 | hauteur (u16 petit-boutiste, au plus 240) |
+| 8- | pixels ligne par ligne depuis le haut, RGB565 petit-boutiste (rouge sur les bits 15-11, vert 10-5, bleu 4-0) |
+
+Taille : 8 + largeur × hauteur × 2 octets, au plus 192 008. La console range ce fichier tel quel
+dans son cache (`<id>.r565`), puis découpe les pixels en tuiles 8 × 8 pour la texture.
 
 ## Mise à l'échelle (à reproduire en C)
 

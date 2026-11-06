@@ -5,6 +5,9 @@
 #   make            compile recettes.3dsx (nécessite devkitPro + devkitARM)
 #   make envoyer    envoie le .3dsx à la console par Wi-Fi (3dslink)
 #                   ex. : make envoyer IP=192.168.1.42
+#   make cia        fabrique recettes.cia (installation dans le menu HOME)
+#                   nécessite makerom et bannertool (voir README.md, section CIA)
+#   make installer-cia IP=…  installe recettes.cia par Wi-Fi avec FBI
 #   make test       tests des modules portables, compilés pour le Mac (clang)
 #   make clean      supprime les fichiers compilés
 #
@@ -101,7 +104,7 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean envoyer
+.PHONY: all clean envoyer cia installer-cia
 
 all: $(BUILD)
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
@@ -111,12 +114,45 @@ $(BUILD):
 
 clean:
 	@echo nettoyage...
-	@rm -fr $(BUILD) $(TARGET).3dsx $(TARGET).smdh $(TARGET).elf
+	@rm -fr $(BUILD) $(TARGET).3dsx $(TARGET).smdh $(TARGET).elf $(TARGET).cia
 	@$(MAKE) --no-print-directory -C tests clean
 
 # 3dslink : lancer d'abord le Homebrew Launcher sur la console et appuyer sur Y.
 envoyer: all
 	3dslink $(if $(IP),-a $(IP)) $(TARGET).3dsx
+
+#-------------------------------------------------------------------------------
+# Paquet CIA. Les outils sont cherchés dans outils/ (à côté de ce Makefile),
+# puis dans le PATH. L'icône est celle du .3dsx (icon.png → recettes.smdh) ;
+# la bannière et son son sont dans cia/ (cia/fabriquer_visuels.py les refait).
+#-------------------------------------------------------------------------------
+MAKEROM    ?= $(firstword $(wildcard $(CURDIR)/outils/makerom) makerom)
+BANNERTOOL ?= $(firstword $(wildcard $(CURDIR)/outils/bannertool) bannertool)
+VERSION    := 1 0 0
+
+# Bannière seulement si bannertool est disponible (il n'existe pas de version
+# macOS publiée : sans lui, le CIA est fait sans bannière).
+AVEC_BANNIERE := $(shell command -v $(BANNERTOOL) >/dev/null 2>&1 && echo oui)
+
+cia: all
+	@command -v $(MAKEROM) >/dev/null 2>&1 || { echo "makerom introuvable : voir README.md, section « Paquet CIA »."; exit 1; }
+	@mkdir -p $(BUILD)
+ifeq ($(AVEC_BANNIERE),oui)
+	$(BANNERTOOL) makebanner -i cia/banniere.png -a cia/banniere.wav -o $(BUILD)/banniere.bnr
+else
+	@echo "ATTENTION : bannertool introuvable, CIA sans bannière (l'icône reste affichée)."
+endif
+	$(MAKEROM) -f cia -o $(TARGET).cia -target t -exefslogo -rsf cia/recettes.rsf \
+		-elf $(TARGET).elf -icon $(TARGET).smdh \
+		$(if $(AVEC_BANNIERE),-banner $(BUILD)/banniere.bnr) \
+		-major $(word 1,$(VERSION)) -minor $(word 2,$(VERSION)) -micro $(word 3,$(VERSION))
+	@echo "$(TARGET).cia créé."
+
+# Installe le .cia par Wi-Fi avec FBI (sur la console : FBI → Remote Install →
+# Receive URLs over the network). Ex. : make installer-cia IP=192.168.1.67
+installer-cia: cia
+	@test -n "$(IP)" || { echo "Indiquer l'adresse de la console : make installer-cia IP=192.168.1.67"; exit 1; }
+	python3 cia/envoyer_cia.py $(IP) $(TARGET).cia
 
 else
 

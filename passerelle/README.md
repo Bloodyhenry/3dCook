@@ -8,7 +8,7 @@ La passerelle sait lire deux sources :
 
 | Source | Recettes | Menu de la 3DS |
 |---|---|---|
-| **Mealie** (recommandée) | API REST de Mealie | planning de repas des 7 prochains jours |
+| **Mealie** (recommandée) | API REST de Mealie | recettes favorites (cœur) du compte du jeton, ou planning de repas |
 | Export JSON | export statique d'un site de recettes, en lecture seule | page web de la passerelle |
 
 Pour ajouter un autre gestionnaire (Tandoor, Nextcloud Cookbook…), il suffit
@@ -75,8 +75,40 @@ ETIQUETTE   = Import      # étiquette Mealie ajoutée à chaque recette export�
    Les allergènes deviennent des étiquettes « Allergène : … ».
 5. **Créer un jeton d'API.** Aller sur la page `/user/profile/api-tokens`, créer
    un jeton nommé `3DS`, le copier dans `.env` (`MEALIE_JETON=…`), puis relancer le projet.
-6. **Planifier des repas** dans le planning de Mealie : ils apparaissent dans le menu
-   de la 3DS (`http://<NAS>:8383/` pour vérifier).
+6. **Choisir les recettes de la console** : dans Mealie, chercher une recette et toucher son
+   **cœur** (favori), avec le compte qui a créé le jeton. Toutes les recettes favorites forment le
+   menu de la 3DS, triées par titre (`http://<NAS>:8383/` pour vérifier). Retirer le cœur la
+   retire de la console à la synchronisation suivante.
+   Pour utiliser plutôt le planning de repas des 7 prochains jours, mettre
+   `MENU_MEALIE=planning` dans `.env`.
+
+## Mettre à jour la passerelle du NAS
+
+Depuis le Mac, avec le partage `docker` du NAS monté dans le Finder :
+
+```bash
+make deployer-nas
+```
+
+La commande lance les tests, puis copie le code dans `docker/recettes3ds/passerelle`. Elle ne
+touche ni à `.env`, ni à `data/`, ni aux archives, et retire les anciens fichiers de code qui
+n'existent plus. Ensuite, dans Container Manager, ouvrir le projet `recettes3ds`, puis faire
+**Arrêter** et **Construire**. Enfin :
+
+```bash
+make verifier-nas
+```
+
+Cette commande compare l'empreinte du code du Mac à celle que la passerelle du NAS indique dans
+`/api/info`. Elle répond « À jour », ou « Ancien code » si le NAS tourne encore sur l'ancienne
+image.
+
+**Une fois pour toutes**, ajouter `pull_policy: build` sous `image: recettes3ds:latest` dans le
+`compose.yaml` du NAS (le `docker-compose.yml` d'ici l'a déjà). Sinon, Container Manager réutilise
+l'ancienne image et ignore le nouveau code. À défaut, supprimer l'image `recettes3ds` (onglet
+**Image**) avant **Construire**.
+
+L'emplacement du projet et l'adresse du NAS se changent dans `local.mk` (`NAS_PROJET`, `NAS_URL`).
 
 Pour mieux exploiter les données, tu peux compléter dans Mealie :
 

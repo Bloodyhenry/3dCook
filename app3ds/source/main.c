@@ -21,6 +21,7 @@
 #include "micro.h"
 #include "minuterie.h"
 #include "mouvement.h"
+#include "photo_ecran.h"
 #include "recette.h"
 #include "reseau.h"
 #include "saisie.h"
@@ -66,6 +67,7 @@ static void charger_liste(void)
     catalogue_preparer(DOSSIER_RECETTES);
     catalogue_lire(&catalogue, DOSSIER_RECETTES);
     if (menu_lire(CHEMIN_MENU, &menu)) catalogue_appliquer_menu(&catalogue, &menu);
+    photo_ecran_oublier();   /* les photos ont pu changer */
     vl_init(&liste, &catalogue, config.passerelle);
 }
 
@@ -276,6 +278,7 @@ int main(void)
     }
 
     camera_arreter();
+    photo_ecran_fin();
     micro_fin();
     alarme_fin();
     C2D_TextBufDelete(tampon);

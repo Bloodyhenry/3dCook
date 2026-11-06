@@ -10,24 +10,31 @@
 #include "config.h"
 #include "fichiers.h"
 #include "menu.h"
+#include "photo.h"
 #include "synchro.h"
 #include "verif.h"
 
 /* --- Faux serveur ------------------------------------------------------------------ */
 
-typedef struct { const char *url; const char *reponse; } Route;
+typedef struct { const char *url; const char *reponse; int longueur; } Route;
 static Route routes[16];
 static int nb_routes, nb_appels;
 static char derniers_appels[32][128];
 
-static void route(const char *url, const char *reponse)
+static void route_binaire(const char *url, const char *reponse, int longueur)
 {
     for (int i = 0; i < nb_routes; i++)
         if (strcmp(routes[i].url, url) == 0) {
             routes[i].reponse = reponse;
+            routes[i].longueur = longueur;
             return;
         }
-    routes[nb_routes++] = (Route){url, reponse};
+    routes[nb_routes++] = (Route){url, reponse, longueur};
+}
+
+static void route(const char *url, const char *reponse)
+{
+    route_binaire(url, reponse, reponse ? (int)strlen(reponse) : 0);
 }
 
 static int faux_telecharger(void *ctx, const char *url, char *tampon, int max,
@@ -39,7 +46,7 @@ static int faux_telecharger(void *ctx, const char *url, char *tampon, int max,
     for (int i = 0; i < nb_routes; i++) {
         if (strcmp(routes[i].url, url) != 0) continue;
         if (!routes[i].reponse) break;
-        int lg = (int)strlen(routes[i].reponse);
+        int lg = routes[i].longueur;
         if (lg > max) lg = max;
         memcpy(tampon, routes[i].reponse, (size_t)lg);
         return lg;
@@ -151,6 +158,13 @@ int main(void)
     config_lire(chemin_config, &relue);
     VERIF_NOMBRE(relue.camera == true && relue.sensibilite_camera == 3, 1);
 
+    /* --- Message d'erreur de la passerelle --- */
+    const char *e502 = "{\"erreur\":\"Mealie refuse le jeton d'API\"}";
+    VERIF_NOMBRE(synchro_erreur_passerelle(e502, (int)strlen(e502), texte, sizeof(texte)), 1);
+    VERIF_TEXTE(texte, "Mealie refuse le jeton d'API");
+    VERIF_NOMBRE(synchro_erreur_passerelle("<html>502</html>", 16, texte, sizeof(texte)), 0);
+    VERIF_NOMBRE(synchro_erreur_passerelle("{\"autre\":1}", 11, texte, sizeof(texte)), 0);
+
     /* --- Menu --- */
     static Menu m;
     VERIF_NOMBRE(menu_depuis_json(MENU_2, (int)strlen(MENU_2), &m, texte, sizeof(texte)), 1);
@@ -187,6 +201,11 @@ int main(void)
     route(A "/menu", MENU_2);
     route(A "/recipes/416", ACRAS_R1);
     route(A "/recipes/388", CAKE_C1);
+    /* Photo 2 × 1 de l'acras (388 n'a pas de photo : "image": false). */
+    static const char photo_ok[] = {'R', '5', '6', '5', 2, 0, 1, 0, 0x00, (char)0xF8, 0x1F, 0x00};
+    route_binaire(A "/recipes/416/image.rgb565", photo_ok, (int)sizeof(photo_ok));
+    snprintf(chemin, sizeof(chemin), "%s/388" PHOTO_EXTENSION, dossier);   /* photo périmée */
+    ecrire(chemin, "R565");
     snprintf(chemin, sizeof(chemin), "%s/ancienne.json", dossier);   /* plus au menu */
     ecrire(chemin, CAKE_C1);
     snprintf(chemin, sizeof(chemin), "%s/ancienne.jpg", dossier);
@@ -198,7 +217,12 @@ int main(void)
     synchroniser(A, dossier, chemin_menu, faux_telecharger, progres, NULL, &b);
     VERIF_NOMBRE(b.menu_ok && b.nb_menu == 2 && b.telechargees == 2 && b.echecs == 0, 1);
     VERIF_NOMBRE(b.supprimees, 1);
-    VERIF_NOMBRE(nb_appels, 3);
+    VERIF_NOMBRE(nb_appels, 4);                           /* menu, 2 recettes, 1 photo */
+    VERIF_NOMBRE(b.photos == 1 && b.photos_echecs == 0, 1);
+    snprintf(chemin, sizeof(chemin), "%s/416" PHOTO_EXTENSION, dossier);
+    VERIF_NOMBRE(existe(chemin), 1);
+    snprintf(chemin, sizeof(chemin), "%s/388" PHOTO_EXTENSION, dossier);
+    VERIF_NOMBRE(existe(chemin), 0);                      /* plus de photo pour 388 */
     VERIF_NOMBRE(progres_appels, 4);                      /* menu + 2 recettes + fin */
     VERIF_NOMBRE(existe(chemin_menu), 1);
     snprintf(chemin, sizeof(chemin), "%s/ancienne.json", dossier);
@@ -232,7 +256,27 @@ int main(void)
     nb_appels = 0;
     synchroniser(A, dossier, chemin_menu, faux_telecharger, NULL, NULL, &b);
     VERIF_NOMBRE(b.a_jour == 2 && b.telechargees == 0, 1);
-    VERIF_NOMBRE(nb_appels, 1);
+    VERIF_NOMBRE(nb_appels, 1);                           /* la photo est déjà là */
+
+    /* Photo effacée de la carte : elle seule est retéléchargée. */
+    snprintf(chemin, sizeof(chemin), "%s/416" PHOTO_EXTENSION, dossier);
+    remove(chemin);
+    nb_appels = 0;
+    synchroniser(A, dossier, chemin_menu, faux_telecharger, NULL, NULL, &b);
+    VERIF_NOMBRE(nb_appels == 2 && b.photos == 1 && existe(chemin), 1);
+
+    /* Photo abîmée ou absente du serveur : la recette reste, la photo est comptée en échec. */
+    remove(chemin);
+    static const char photo_abimee[] = {'R', '5', '6', '5', 2, 0, 1, 0, 0x00};
+    route_binaire(A "/recipes/416/image.rgb565", photo_abimee, (int)sizeof(photo_abimee));
+    synchroniser(A, dossier, chemin_menu, faux_telecharger, NULL, NULL, &b);
+    VERIF_NOMBRE(b.photos_echecs == 1 && b.echecs == 0 && !existe(chemin), 1);
+    synchro_resume(&b, texte, sizeof(texte));
+    VERIF_TEXTE(texte, "Synchronisé : 2 recettes au menu, 1 photo non reçue.");
+    route(A "/recipes/416/image.rgb565", NULL);            /* 404 */
+    synchroniser(A, dossier, chemin_menu, faux_telecharger, NULL, NULL, &b);
+    VERIF_NOMBRE(b.photos_echecs == 1 && b.echecs == 0, 1);
+    route_binaire(A "/recipes/416/image.rgb565", photo_ok, (int)sizeof(photo_ok));
 
     /* --- 4e synchro : une recette change, l'autre arrive abîmée --- */
     char menu_modifie[512];

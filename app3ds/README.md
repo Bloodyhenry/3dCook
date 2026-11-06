@@ -12,7 +12,10 @@ dans [../docs/schema.md](../docs/schema.md).
 
 ## 1. Où en est le projet
 
-Le projet avance en six étapes. On valide chaque étape sur la console avant de passer à la suivante.
+Le projet avance en six étapes, validées une à une sur la console : **les six sont faites**.
+S'y ajoute la photo des recettes (voir plus bas), **validée sur la console** (6 novembre 2026).
+L'appli s'installe aussi comme un vrai logiciel du menu HOME (paquet CIA, section 7 bis),
+**validé sur la console** (6 novembre 2026).
 
 | Étape | Ce qu'elle apporte | État |
 |---|---|---|
@@ -21,7 +24,7 @@ Le projet avance en six étapes. On valide chaque étape sur la console avant de
 | 3 | Récupérer le menu et les recettes depuis la passerelle par Wi-Fi, et les garder sur la SD pour cuisiner sans Wi-Fi | **validée sur la console** (6 novembre 2026) |
 | 4 | Minuteurs en parallèle, alarme sonore, LED qui clignote, mise en veille bloquée pendant la cuisson | **validée sur la console** (6 novembre 2026) |
 | 5 | Souffler dans le micro pour passer à l'étape suivante | **validée sur la console** (6 novembre 2026) |
-| 6 | Passer la main devant la caméra intérieure pour passer à l'étape suivante | à faire |
+| 6 | Passer la main devant la caméra intérieure pour passer à l'étape suivante | **validée sur la console** (6 novembre 2026) |
 
 ### Ce que fait l'étape 1
 
@@ -139,6 +142,47 @@ gauche des boutons. Pas besoin de toucher la console.
 
 ---
 
+### Ce que fait l'étape 6
+
+**Passer la main devant la caméra intérieure passe aussi à l'étape suivante.** La caméra se
+trouve au-dessus de l'écran du haut. C'est utile quand on ne peut pas souffler, par exemple en
+goûtant ou en parlant.
+
+- **Elle est coupée par défaut**, car elle consomme de la batterie. On l'active dans
+  **Réglages**, avec **Caméra : oui** ou la touche **Y**. Même activée, elle n'est allumée que
+  dans une recette ou dans les Réglages, jamais dans la liste.
+- **Ce qui déclenche** : une main qui passe à 10-30 cm de la caméra, et change d'un coup une
+  grande partie de l'image. Une personne qui bouge au fond de la pièce ou un changement de
+  lumière (lampe, soleil, exposition automatique) ne déclenchent pas. La comparaison se fait en
+  basse résolution (40 × 30, en niveaux de gris).
+- **Il faut passer la main, pas la laisser** : une main laissée plus de 2 secondes devant la
+  caméra compte deux fois, à son arrivée et à son départ.
+- **Pas de faux déclenchement en touchant la console** : pendant qu'on touche l'écran ou qu'on
+  appuie sur un bouton, et 1 seconde après, la caméra est ignorée. Elle l'est aussi pendant une
+  alarme, et 1,5 seconde après son démarrage, le temps que l'exposition se règle.
+- **Un geste à la fois** : après un souffle reconnu, la caméra se tait 1,5 seconde, et
+  inversement. Souffler et passer la main en même temps n'avance donc que d'une étape.
+- **Indicateurs** : dans une recette, la jauge de la caméra s'affiche sous celle du micro, en
+  haut de l'écran.
+- **Réglages** : une seconde jauge en direct (« Main »), et une sensibilité de 1 à 5, avec les
+  boutons **-** / **+** ou les touches **L** / **R**.
+
+### En plus : la photo de la recette
+
+Dans la liste, **l'écran du haut affiche la photo de la recette sélectionnée**. Son titre, son
+jour, son repas et ses minuteurs s'affichent sur un bandeau sombre en bas. Sans photo, l'affichage
+reste celui d'avant (titre en grand).
+
+- **La passerelle convertit la photo** au format de texture de la console (RGB565, au plus
+  400 × 240) : `GET /recipes/<id>/image.rgb565`, décrit dans [../docs/schema.md](../docs/schema.md).
+  La console n'a pas de décodeur JPEG, et ce format ne lui demande aucun calcul : il suffit de
+  ranger les pixels en tuiles de 8 × 8 pour le GPU (`photo.c`).
+- **À la synchronisation**, la photo est téléchargée avec sa recette (environ 170 Ko), puis gardée
+  sur la carte (`3ds/recettes/cache/<id>.r565`). Elle n'est retéléchargée que si la recette
+  change ou si le fichier manque. Une photo qui n'arrive pas ne bloque pas la recette : le résumé
+  indique alors « 1 photo non reçue ».
+- **Défilement fluide** : la photo n'est chargée que quand la sélection reste immobile 0,15 seconde.
+
 ## 2. Commandes sur la console
 
 | Action | Boutons physiques | Écran tactile |
@@ -149,6 +193,7 @@ gauche des boutons. Pas besoin de toucher la console.
 | Plus de portions | **X** | bouton **+** |
 | Moins de portions | **Y** | bouton **-** |
 | Étape suivante, sans les mains | souffler vers le micro (sous l'écran du bas) | |
+| Étape suivante, sans les mains (caméra activée) | passer la main devant la caméra (au-dessus de l'écran du haut) | |
 | Lancer le minuteur de l'étape | | toucher son bouton (au-dessus de Précédent / Suivant) |
 | Arrêter un minuteur qui tourne | | toucher son bouton, puis encore dans les 3 s |
 | Arrêter l'alarme | n'importe quel bouton sauf START | toucher l'écran |
@@ -163,7 +208,7 @@ Dans la liste des recettes :
 | Ouvrir la recette choisie | **A** | toucher sa ligne |
 | Page précédente / suivante | **L** / **R** (ou **←** / **→**) | boutons **Haut** / **Bas** |
 | Télécharger le menu (synchroniser) | **Y** | bouton **Synchro** |
-| Réglages : adresse, micro, sensibilité | **X** | bouton **Réglages** |
+| Réglages : adresse, micro, caméra, sensibilités | **X** | bouton **Réglages** |
 | Recette d'exemple (minuteur de test de 10 s) | **SELECT** (ou **A** sans recette) | bouton **Recette d'exemple** |
 
 Les commandes sans les mains (souffle dans le micro, main devant la caméra) arriveront aux étapes 5 et 6.
@@ -181,15 +226,19 @@ app3ds/
 │   │                        d'un écran à l'autre (liste ↔ recette), arrêt
 │   ├── vue_liste.c / .h     écran « menu de la semaine » et écran de synchronisation
 │   ├── vue_recette.c / .h   écran « recette » : étape, ingrédients, portions
-│   ├── vue_reglages.c / .h  écran Réglages : adresse, micro, sensibilité, jauge en direct
+│   ├── vue_reglages.c / .h  écran Réglages : adresse, micro, caméra, jauges en direct
 │   ├── vue_minuteurs.c / .h bandeau des minuteurs, alerte « C'est prêt ! », boutons
+│   ├── photo_ecran.c / .h   texture de la photo et affichage (citro2d)
 │   ├── micro.c / .h         capture du micro (service mic, tampon circulaire)
+│   ├── camera.c / .h        capture de la caméra intérieure (service cam, 160×120 RGB565)
 │   ├── dessin.c / .h        couleurs, texte, boutons, communs aux deux écrans
 │   ├── alarme.c / .h        son (ndsp ou csnd), LED de notification, veille
 │   ├── reseau.c / .h        téléchargement HTTP (httpc) et état du Wi-Fi (ac)
 │   ├── saisie.c / .h        clavier de la console pour saisir l'adresse
 │   ├── minuterie.c / .h     minuteurs en parallèle, sonnerie, double toucher (portable)
 │   ├── souffle.c / .h       reconnaissance du souffle dans le son du micro (portable)
+│   ├── mouvement.c / .h     reconnaissance d'une main devant la caméra (portable)
+│   ├── photo.c / .h         photo RGB565 : vérification, découpage en tuiles (portable)
 │   ├── synchro.c / .h       menu + recettes modifiées → cache de la carte SD (portable)
 │   ├── menu.c / .h          menu de la semaine, jours, identifiants sûrs (portable)
 │   ├── config.c / .h        réglages : 3ds/recettes/config.ini (portable)
@@ -209,6 +258,8 @@ app3ds/
     ├── test_synchro.c       réglages, menu, synchronisation contre un faux serveur
     ├── test_minuterie.c     minuteurs avec une horloge factice
     ├── test_souffle.c       souffle, voix, claquement, bruit de cuisine simulés
+    ├── test_mouvement.c     main, personne au loin, changement de lumière simulés
+    ├── test_photo.c         en-tête de la photo, ordre des tuiles, chaque pixel à sa place
     ├── verifier_dossier.c   outil : lire tout un dossier de recettes (voir section 8)
     ├── synchro_hote.c       outil : vraie synchronisation depuis le Mac (voir section 8)
     ├── verif.h              mini-outil de vérification
@@ -217,7 +268,8 @@ app3ds/
 
 **Qu'est-ce qu'un module « portable » ?** C'est un fichier qui n'utilise aucune fonction propre
 à la 3DS : `echelle.c`, `mise_en_page.c`, `recette.c`, `json.c`, `recette_json.c`,
-`catalogue.c`, `fichiers.c`, `config.c`, `menu.c`, `synchro.c`, `minuterie.c` et `souffle.c`. Même la synchronisation est
+`catalogue.c`, `fichiers.c`, `config.c`, `menu.c`, `synchro.c`, `minuterie.c`, `souffle.c`,
+`mouvement.c` et `photo.c`. Même la synchronisation est
 portable : le téléchargement lui est passé en paramètre (httpc sur la console, un faux serveur ou
 curl sur le Mac). On peut donc le compiler et le tester sur
 le Mac avec le compilateur habituel (clang), sans devkitPro.
@@ -298,6 +350,8 @@ cd ~/Documents/Code/3DS/app3ds
 |---|---|---|
 | `make` | compile l'appli et produit **`recettes.3dsx`** | oui |
 | `make envoyer` | compile puis envoie l'appli à la console par Wi-Fi | oui |
+| `make cia` | fabrique **`recettes.cia`** (voir section 7 bis) | oui, plus makerom (bannertool facultatif) |
+| `make installer-cia IP=…` | installe le CIA par Wi-Fi avec FBI | oui, plus makerom |
 | `make test` | lance les tests sur le Mac | non |
 | `make clean` | supprime les fichiers compilés | oui |
 
@@ -413,10 +467,106 @@ Tout se fait par Wi-Fi.
 - [ ] **Micro : coupé** dans les Réglages : la jauge disparaît de la recette, et souffler ne fait plus rien.
 - [ ] Les réglages sont conservés après avoir quitté puis relancé l'appli.
 
+### Ce qu'il faut vérifier à l'étape 6
+
+- [ ] **Réglages** (X dans la liste), puis **Caméra : oui** (ou **Y**) : après 1 à 2 secondes,
+      la jauge « Main » réagit aux mouvements devant la caméra.
+- [ ] Passer la main à 10-30 cm de la caméra affiche « Main détectée ! ». Sinon, monter la
+      sensibilité « Main ».
+- [ ] Bouger normalement à 1 m de la console, ou allumer une lampe, ne déclenche pas. Sinon,
+      baisser la sensibilité.
+- [ ] Dans une recette, un passage de main avance d'une étape, et la jauge sous celle du micro
+      devient orange.
+- [ ] Toucher l'écran (par exemple **+** ou **-** des portions) ne fait pas avancer la recette.
+- [ ] Souffler en passant la main n'avance que d'une étape.
+- [ ] **Caméra : non** : la jauge disparaît de la recette.
+- [ ] Le réglage est conservé après avoir relancé l'appli.
+
+### Ce qu'il faut vérifier pour la photo
+
+- [ ] Relancer la passerelle (`make lancer`), puis **Synchro** sur la console : le résumé ne
+      signale pas de photo manquante.
+- [ ] Dans la liste, la photo de la recette sélectionnée s'affiche, **à l'endroit** et avec les
+      bonnes couleurs, avec le titre lisible sur le bandeau du bas.
+- [ ] Faire défiler la liste avec ↑ / ↓ : le défilement reste fluide, et la photo suit.
+- [ ] Une recette sans photo (ou la recette d'exemple) garde l'affichage précédent.
+- [ ] Avec un minuteur en cours, le bandeau du titre se place au-dessus de celui des minuteurs.
+
 `passerelle/outils/exporter_sd.py` (`make export-sd`) prépare encore des fichiers pour une copie
 manuelle sur la carte, mais on n'en a plus besoin.
 
 ---
+
+## 7 bis. Paquet CIA : installer l'appli dans le menu HOME
+
+Avec un **CIA**, l'appli s'installe sur la console comme un vrai logiciel : elle apparaît dans le
+menu HOME avec son icône (une marmite) et sa bannière, et se lance sans le Homebrew Launcher.
+
+### Ce qu'il faut (une seule fois)
+
+Deux outils de la communauté homebrew, absents de devkitPro, se posent dans `app3ds/outils/` :
+
+1. **makerom**, qui fabrique le CIA (projet Project_CTR). Il existe une version pour Mac à
+   processeur Apple :
+   ```bash
+   mkdir -p ~/Documents/Code/3DS/app3ds/outils && cd ~/Documents/Code/3DS/app3ds/outils
+   ```
+   ```bash
+   curl -LO https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-macos_arm64.zip
+   ```
+   ```bash
+   unzip makerom-v0.19.0-macos_arm64.zip && chmod +x makerom && ./makerom -help | head -3
+   ```
+2. **bannertool**, qui fabrique la bannière du menu HOME (fork maintenu par diasurgical, page
+   <https://github.com/diasurgical/bannertool/releases>, fichier `bannertool.zip`, 2,6 Mo).
+   **Ce zip ne contient pas de version macOS** (seulement Linux et Windows). bannertool est donc
+   **facultatif** : sans lui, `make cia` fabrique un CIA **sans bannière**. L'icône s'affiche dans
+   le menu HOME, mais l'écran du haut reste vide quand on choisit l'appli. Pour avoir la bannière,
+   on le compile depuis son code source. Ses outils de compilation ne connaissent pas les Mac à
+   puce Apple : `UNAME_M=x86_64` les contourne, et le programme obtenu est bien natif (arm64),
+   malgré le nom du dossier :
+   ```bash
+   git clone --recurse-submodules https://github.com/diasurgical/bannertool.git ~/Documents/Code/bannertool
+   ```
+   ```bash
+   cd ~/Documents/Code/bannertool && make UNAME_M=x86_64
+   ```
+   ```bash
+   cp output/mac-x86_64/bannertool ~/Documents/Code/3DS/app3ds/outils/ && chmod +x ~/Documents/Code/3DS/app3ds/outils/bannertool
+   ```
+
+Sur la console, il faut **FBI**, le gestionnaire de CIA habituel, qui s'installe depuis
+**Universal-Updater**.
+
+### Fabriquer et installer le CIA
+
+```bash
+cd ~/Documents/Code/3DS/app3ds && make cia
+```
+
+Le résultat est `recettes.cia`. Pour l'installer **par Wi-Fi**, sans sortir la carte SD :
+
+1. Sur la console, ouvrir **FBI**, puis **Remote Install**, puis **Receive URLs over the network**.
+2. Sur le Mac, en mettant l'adresse IP de la console :
+   ```bash
+   make installer-cia IP=192.168.1.67
+   ```
+   Le script sert le fichier, envoie son adresse à FBI, puis attend la fin de l'installation.
+3. Sur la console, confirmer l'installation dans FBI. L'appli **Recettes** apparaît ensuite dans le
+   menu HOME. Une nouvelle version s'installe par-dessus l'ancienne, de la même façon.
+
+Le `.3dsx` reste utilisable : `make envoyer` pour les essais rapides, le CIA pour l'usage
+quotidien. Les deux partagent les mêmes réglages et le même cache sur la carte SD.
+
+### Fichiers du paquet
+
+- `icon.png` (48 × 48) : l'icône, utilisée aussi par le Homebrew Launcher.
+- `cia/banniere.png` (256 × 128) et `cia/banniere.wav` : la bannière et son petit son.
+  `cia/fabriquer_visuels.py` les dessine et peut les refaire avec Pillow :
+  `../passerelle/.venv/bin/python cia/fabriquer_visuels.py`.
+- `cia/recettes.rsf` : la description de l'appli pour makerom. Elle n'accorde que les droits
+  utilisés : carte SD, affichage, boutons, Wi-Fi et HTTP, son, LED, micro, caméra.
+- `cia/envoyer_cia.py` : l'envoi par Wi-Fi vers FBI.
 
 ## 8. Les tests sur le Mac
 
@@ -424,7 +574,7 @@ manuelle sur la carte, mais on n'en a plus besoin.
 make test
 ```
 
-Cette commande fait huit choses, sans devkitPro :
+Cette commande fait dix choses, sans devkitPro :
 
 1. **`test_echelle`** : 40 vérifications sur le calcul des quantités. Elle vérifie les arrondis,
    les fractions (« 1 ½ »), les pluriels (« 2 gousses ») et les plages (« 40-50 g »).
@@ -437,7 +587,8 @@ Cette commande fait huit choses, sans devkitPro :
 4. **`test_recette_json`** : 65 vérifications de la lecture d'une recette et du catalogue. Elle
    couvre les champs, les limites dépassées, et un faux dossier de carte SD avec des fichiers
    cassés, trop gros, et des fichiers `._` de macOS.
-5. **`test_synchro`** : 80 vérifications des réglages (adresse, micro, sensibilité), du menu
+5. **`test_synchro`** : 92 vérifications des réglages (adresse, micro, caméra, sensibilités), des
+   photos (téléchargées, gardées, abîmées, périmées), du menu
    (jours de la semaine, identifiants piégés comme `../`) et de la synchronisation contre un faux
    serveur. Elle vérifie qu'une passerelle injoignable laisse la carte intacte, qu'une recette
    abîmée ne remplace pas la bonne, que rien n'est retéléchargé sans changement, et que le ménage
@@ -452,7 +603,14 @@ Cette commande fait huit choses, sans devkitPro :
    - un long souffle, qui ne déclenche qu'une fois ;
    - deux souffles espacés, qui déclenchent deux fois ;
    - la pause après un déclenchement, la pause pendant l'alarme, et les sensibilités.
-8. **Vérification de syntaxe** de `dessin.c`, `vue_liste.c`, `vue_recette.c`,
+8. **`test_mouvement`** : 18 vérifications avec des images simulées. Une scène immobile, un saut
+   de lumière ou un petit objet qui bouge au loin ne déclenchent pas. Une main qui passe déclenche
+   une fois, et de nouveau après un retour au calme ; elle est ignorée quand on le demande. La
+   conversion des images de la caméra en niveaux de gris est aussi vérifiée.
+9. **`test_photo`** : 19 vérifications de la photo. Elle couvre l'en-tête, les fichiers coupés ou
+   trop grands, l'ordre des pixels dans les tuiles 8 × 8, l'absence de pixel écrasé sur une
+   texture pleine, et chaque pixel d'une photo 400 × 240 à sa place.
+10. **Vérification de syntaxe** de `dessin.c`, `vue_liste.c`, `vue_recette.c`,
    `vue_minuteurs.c`, `vue_reglages.c` et `main.c`. Ces
    fichiers utilisent des fonctions 3DS : on les vérifie avec de **faux** en-têtes (`tests/stubs/`), qui reproduisent les signatures
    de libctru et de citro2d. Ça repère les fautes de frappe et les erreurs de type, mais
@@ -491,6 +649,14 @@ make -C tests synchro_hote && tests/synchro_hote http://127.0.0.1:8383 /tmp/faus
 | *Adresse invalide* | Taper seulement l'adresse et le port, par exemple `192.168.1.84:8383`. Pas de `https`, pas de chemin. |
 | Le souffle ne fait rien | Vérifier dans **Réglages** que le micro est activé et que la jauge bouge. Souffler plus près, ou monter la sensibilité. |
 | La recette avance toute seule | Baisser la sensibilité dans **Réglages**. Une hotte ou un mixeur très bruyant près de la console peut suffire. On peut aussi couper le micro. |
+| La main ne fait rien | Vérifier dans **Réglages** que la caméra est sur **oui** et que la jauge « Main » bouge. Passer la main plus près (10-30 cm), assez vite, et monter la sensibilité. Dans une pièce très sombre, la caméra voit mal. |
+| La recette avance toute seule (caméra) | Baisser la sensibilité « Main », ou tourner la console pour que la caméra ne voie pas un passage. On peut aussi couper la caméra. |
+| « Indisponible sur cette console » sous la jauge Main | La caméra n'a pas démarré. Basculer **Caméra : non** puis **oui** pour réessayer. |
+| La photo s'affiche à l'envers ou en morceaux | Me le signaler. C'est l'ordre des pixels dans la texture (`photo.c`), qui ne peut se vérifier que sur la console. |
+| « photo non reçue » après une synchro | La passerelle ne sert pas encore les photos converties : la relancer avec la dernière version (`make lancer`, ou reconstruire le conteneur sur le NAS). |
+| `makerom introuvable` ou `bannertool introuvable` | Les poser dans `app3ds/outils/` et les rendre exécutables (`chmod +x`), voir la section 7 bis. |
+| macOS refuse de lancer makerom ou bannertool (« développeur non identifié ») | Ça arrive s'ils ont été téléchargés avec le navigateur. Les autoriser dans *Réglages Système*, puis *Confidentialité et sécurité*, ou les retélécharger avec `curl`. |
+| `make installer-cia` : « Impossible de joindre FBI » | Sur la console, FBI doit être sur l'écran **Receive URLs over the network**. Vérifier aussi l'adresse IP de la console et le Wi-Fi. |
 | Pas de son à la fin d'un minuteur | Vérifier le curseur de volume. Puis extraire le firmware DSP une fois avec **DSP1**, qui crée `sdmc:/3ds/dspfirm.cdc` (voir l'étape 4). La LED et l'écran signalent l'alarme dans tous les cas. |
 | « fichier(s) illisible(s) » | Le message donne le nom du fichier et la raison. **Synchro** le remplace par une version saine. |
 | Écran noir, puis retour au menu | Noter ce qui s'affiche et me le transmettre. Le plus utile est le texte d'erreur de Luma3DS, s'il y en a un. |

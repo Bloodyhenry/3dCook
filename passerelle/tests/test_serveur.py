@@ -164,6 +164,24 @@ class TestServeur(unittest.TestCase):
             self.assertEqual(img.size, (320, 240))
             self.assertFalse(img.info.get("progressive"))
 
+    def test_image_rgb565(self):
+        import struct
+        code, entetes, brut = self.requete("GET", "/recipes/416/image.rgb565")
+        self.assertEqual(code, 200)
+        self.assertEqual(brut[:4], b"R565")
+        largeur, hauteur = struct.unpack("<HH", brut[4:8])
+        self.assertEqual((largeur, hauteur), (320, 240))
+        self.assertEqual(len(brut), 8 + largeur * hauteur * 2)
+        # Pixel du milieu : la photo de test est unie (200, 120, 40), au JPEG près.
+        milieu = 8 + 2 * (120 * largeur + 160)
+        v = brut[milieu] | (brut[milieu + 1] << 8)
+        r, g, b = (v >> 11) << 3, ((v >> 5) & 63) << 2, (v & 31) << 3
+        self.assertLess(max(abs(r - 200), abs(g - 120), abs(b - 40)), 16)
+        # Deuxième demande : servie depuis le cache.
+        code2, _, brut2 = self.requete("GET", "/recipes/416/image.rgb565")
+        self.assertEqual((code2, brut2), (200, brut))
+        self.assertEqual(self.requete("GET", "/recipes/388/image.rgb565")[0], 404)
+
     def test_sans_image(self):
         code, _ = self.json("GET", "/recipes/388/image")
         self.assertEqual(code, 404)

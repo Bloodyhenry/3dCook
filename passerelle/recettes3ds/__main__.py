@@ -6,7 +6,8 @@ Source Mealie (si MEALIE_URL est défini) :
   MEALIE_URL            adresse de l'API, ex. http://mealie:9000
   MEALIE_JETON          jeton d'API (Mealie → Profil → Jetons d'API)
   MEALIE_LIEN           adresse affichée sur la page web, ex. http://nas:9925 (facultatif)
-  MENU_JOURS            nombre de jours de planning dans le menu   défaut 7
+  MENU_MEALIE           « favoris » (recettes avec un cœur, défaut) ou « planning »
+  MENU_JOURS            jours de planning repris (MENU_MEALIE=planning)   défaut 7
 
 Source export JSON (sinon) :
   RECETTES_SOURCE       dossier de la base (lecture seule)         défaut /source
@@ -40,8 +41,9 @@ def source_depuis_env() -> Source:
                   "(Profil → Jetons d'API), le mettre dans .env et relancer.", flush=True)
         source = SourceMealie(os.environ["MEALIE_URL"], jeton, data,
                               jours=int(os.environ.get("MENU_JOURS", "7")),
-                              lien=os.environ.get("MEALIE_LIEN") or None)
-        print(f"Source : Mealie ({os.environ['MEALIE_URL']})", flush=True)
+                              lien=os.environ.get("MEALIE_LIEN") or None,
+                              menu=os.environ.get("MENU_MEALIE", "favoris").strip().lower())
+        print(f"Source : Mealie ({os.environ['MEALIE_URL']}), menu : {source.source_menu}", flush=True)
         return source
 
     from .sources.export_json import NOM_JSON, SourceExportJson

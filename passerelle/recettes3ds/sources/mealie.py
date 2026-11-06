@@ -4,7 +4,9 @@ La passerelle ne fait que des requêtes GET : elle ne modifie jamais Mealie.
 Elle a besoin d'un jeton d'API (Mealie → Profil → Jetons d'API).
 
 Correspondances (Mealie v3) :
-  - menu de la 3DS      ← planning de repas des N prochains jours ;
+  - menu de la 3DS      ← favoris (cœur) du compte du jeton, triés par titre
+                          (MENU_MEALIE=favoris, par défaut), ou planning de
+                          repas des N prochains jours (MENU_MEALIE=planning) ;
   - ingrédients         ← recipeIngredient : structurés (quantité / unité /
                           aliment) ou texte libre, analysé alors en français ;
   - minuteurs           ← durée saisie sur l'étape (durationSeconds), sinon
@@ -241,7 +243,10 @@ class SourceMealie(Source):
 
     def __init__(self, url: str, jeton: str, dossier_data: Path, jours: int = 7,
                  lien: str | None = None, client: ClientMealie | None = None,
-                 aujourd_hui=dt.date.today):
+                 aujourd_hui=dt.date.today, menu: str = "favoris"):
+        if menu not in ("favoris", "planning"):
+            raise ValueError(f"MENU_MEALIE doit valoir « favoris » ou « planning », pas « {menu} »")
+        self.source_menu = menu
         self.client = client or ClientMealie(url, jeton)
         self.dossier_cache = Path(dossier_data) / "cache" / "images"
         self.jours = max(1, jours)
@@ -297,7 +302,39 @@ class SourceMealie(Source):
             return None
         return image_depuis_octets(octets, destination)
 
+    def info(self) -> dict:
+        info = super().info()
+        info["menu"] = self.source_menu
+        return info
+
     def menu(self) -> dict:
+        if self.source_menu == "favoris":
+            return self._menu_favoris()
+        return self._menu_planning()
+
+    def _menu_favoris(self) -> dict:
+        """Recettes marquées d'un cœur par le compte du jeton, triées par titre."""
+        reponse = self.client.json("/api/users/self/favorites") or {}
+        recettes, vus, maj = [], set(), 0
+        for note in reponse.get("ratings", []):
+            if not note.get("isFavorite", True) or not note.get("recipeId"):
+                continue
+            rid = uuid.UUID(str(note["recipeId"])).hex
+            if rid in vus:
+                continue
+            vus.add(rid)
+            # Pas de date de modification dans la liste des favoris : on relit la
+            # recette (sur le réseau local, quelques dizaines de requêtes au plus).
+            entree = self._charger(rid)
+            if entree is None:
+                continue
+            r = entree[1]
+            maj = max(maj, _epoch(entree[0]))
+            recettes.append({"id": rid, "titre": r["titre"], "rev": r["rev"], "image": r["image"]})
+        recettes.sort(key=lambda x: sans_accents(x["titre"]))
+        return {"v": 1, "maj": maj, "recettes": recettes}
+
+    def _menu_planning(self) -> dict:
         debut = self._aujourd_hui()
         fin = debut + dt.timedelta(days=self.jours - 1)
         page = self.client.json("/api/households/mealplans", {

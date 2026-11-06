@@ -9,6 +9,7 @@ de la passerelle.
 
 import io
 import os
+import struct
 import tempfile
 from pathlib import Path
 from typing import BinaryIO
@@ -52,6 +53,47 @@ def image_en_cache(source: Path, dossier_cache: Path, cle: str) -> Path:
         a_jour = False
     if not a_jour:
         reduire(source, destination)
+    return destination
+
+
+def vers_rgb565(jpeg: Path) -> bytes:
+    """Photo réduite → format brut pour la 3DS (pas de décodeur JPEG sur la console).
+
+    Format : « R565 », largeur et hauteur (u16 petit-boutiste), puis les pixels
+    ligne par ligne depuis le haut, en RGB565 petit-boutiste (rouge sur les bits
+    15-11, vert 10-5, bleu 4-0) : le format de texture GPU_RGB565 de la console.
+    """
+    with Image.open(jpeg) as img:
+        img = img.convert("RGB")
+        largeur, hauteur = img.size
+        rgb = img.tobytes()
+    pixels = bytearray(largeur * hauteur * 2)
+    for i in range(largeur * hauteur):
+        r, v, b = rgb[3 * i], rgb[3 * i + 1], rgb[3 * i + 2]
+        valeur = ((r & 0xF8) << 8) | ((v & 0xFC) << 3) | (b >> 3)
+        pixels[2 * i] = valeur & 0xFF
+        pixels[2 * i + 1] = valeur >> 8
+    return b"R565" + struct.pack("<HH", largeur, hauteur) + bytes(pixels)
+
+
+def rgb565_en_cache(jpeg: Path) -> Path:
+    """Version RGB565 de la photo réduite, rangée à côté d'elle et refaite si besoin."""
+    destination = jpeg.with_suffix(".rgb565")
+    try:
+        a_jour = destination.stat().st_mtime >= jpeg.stat().st_mtime
+    except FileNotFoundError:
+        a_jour = False
+    if not a_jour:
+        donnees = vers_rgb565(jpeg)
+        fd, tmp = tempfile.mkstemp(dir=destination.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(donnees)
+            os.replace(tmp, destination)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
     return destination
 
 

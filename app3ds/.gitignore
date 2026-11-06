@@ -11,3 +11,5 @@ tests/test_*
 tests/verifier_dossier
 tests/synchro_hote
 tests/*.dSYM/
+*.cia
+outils/

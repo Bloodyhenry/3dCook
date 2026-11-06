@@ -4,6 +4,7 @@ Pour la 3DS :
   GET  /menu                    menu (liste courte + rev)
   GET  /recipes/<id>            une recette au format 3DS
   GET  /recipes/<id>/image      photo JPEG ≤ 400×240 (404 si aucune)
+  GET  /recipes/<id>/image.rgb565  la même photo, prête pour le GPU de la console
 Pour la page web (téléphone) :
   GET  /                        page du menu
   GET  /api/info                source utilisée et ce que la page peut faire
@@ -25,11 +26,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from . import empreinte_code
+from .images import rgb565_en_cache
 from .sources import Source, SourceIndisponible
 
 _RE_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 _PAGE = Path(__file__).with_name("web") / "index.html"
 _TAILLE_CORPS_MAX = 4096
+_EMPREINTE = empreinte_code()   # calculée une fois, au démarrage
 
 
 def adresse_locale() -> str | None:
@@ -132,19 +136,22 @@ class Gestionnaire(BaseHTTPRequestHandler):
             info = s.info()
             info["adresse_3ds"] = adresse_pour_3ds(self.headers.get("Host"),
                                                    self.server.server_address[1])
+            info["code"] = _EMPREINTE
             self._json(info)
         elif len(chemin) == 2 and chemin[0] == "recipes":
             r = self._recette_ou_404(chemin[1])
             if r is not None:
                 self._json(r)
-        elif len(chemin) == 3 and chemin[0] == "recipes" and chemin[2] == "image":
+        elif len(chemin) == 3 and chemin[0] == "recipes" and chemin[2] in ("image", "image.rgb565"):
             if self._recette_ou_404(chemin[1]) is None:
                 return
             image = s.chemin_image(chemin[1])
             if image is None:
                 self._erreur(404, "pas de photo")
-            else:
+            elif chemin[2] == "image":
                 self._envoyer(200, image.read_bytes(), "image/jpeg")
+            else:
+                self._envoyer(200, rgb565_en_cache(image).read_bytes(), "application/octet-stream")
         elif chemin == ["api", "recherche"]:
             if not s.recherche:
                 self._erreur(405, f"la recherche se fait dans {s.nom}")

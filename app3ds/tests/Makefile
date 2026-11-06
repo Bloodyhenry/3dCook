@@ -4,8 +4,8 @@ CC      ?= cc
 CFLAGS  := -std=c11 -Wall -Wextra -Werror -O1 -g -I../source -fsanitize=address,undefined
 LDLIBS  := -lm
 
-PORTABLES := $(filter-out ../source/main.c ../source/dessin.c ../source/vue_liste.c ../source/vue_recette.c ../source/reseau.c ../source/saisie.c ../source/alarme.c ../source/vue_minuteurs.c ../source/micro.c ../source/vue_reglages.c ../source/camera.c,$(wildcard ../source/*.c))
-TESTS     := test_echelle test_mise_en_page test_json test_recette_json test_synchro test_minuterie test_souffle test_mouvement
+PORTABLES := $(filter-out ../source/main.c ../source/dessin.c ../source/vue_liste.c ../source/vue_recette.c ../source/reseau.c ../source/saisie.c ../source/alarme.c ../source/vue_minuteurs.c ../source/micro.c ../source/vue_reglages.c ../source/camera.c ../source/photo_ecran.c,$(wildcard ../source/*.c))
+TESTS     := test_echelle test_mise_en_page test_json test_recette_json test_synchro test_minuterie test_souffle test_mouvement test_photo
 
 .PHONY: all clean syntaxe
 all: $(TESTS) syntaxe

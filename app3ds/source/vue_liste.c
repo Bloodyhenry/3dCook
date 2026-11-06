@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "menu.h"
+#include "photo_ecran.h"
 #include "vue_minuteurs.h"
 
 #define LIGNE_H      46          /* hauteur d'une ligne de la liste (doigt) */
@@ -28,6 +29,9 @@ static const Zone Z_REGLAGES = {244, BARRE_Y, 72, BARRE_H};
 static const Zone Z_EXEMPLE = {20, 96, 280, 56};
 
 static const float ECHELLES_TITRE[] = {1.0f, 0.85f, 0.7f, 0.6f, 0.5f};
+static const float ECHELLES_TITRE_PHOTO[] = {0.8f, 0.7f, 0.6f, 0.5f};
+#define VOILE        C2D_Color32(0x1C, 0x1A, 0x17, 0xC8)   /* fond sombre translucide */
+#define PHOTO_DELAI_MS 150      /* sélection immobile depuis ce délai : on charge la photo */
 
 /* Textes mis en page une fois (pas à chaque image). */
 static Paragraphe aide, message;
@@ -40,6 +44,9 @@ void vl_init(VueListe *v, const Catalogue *catalogue, const char *adresse)
     copier_texte(v->adresse, adresse, sizeof(v->adresse));
     v->a_preparer = true;
     v->titre_mis_en_page = -1;
+    v->selection_vue = -1;
+    v->photo_pour = -1;
+    v->titre_photo_pour = -1;
 }
 
 void vl_message(VueListe *v, const char *texte, bool erreur)
@@ -146,6 +153,44 @@ static void entete(C2D_TextBuf tampon, const char *gauche, const char *droite)
     C2D_DrawRectSolid(MARGE, 26, 0.5f, HAUT_LARGEUR - 2 * MARGE, 1, C_BOUTON);
 }
 
+/* Photo en plein écran, titre et informations sur un voile sombre en bas. */
+static void dessiner_haut_photo(VueListe *v, C2D_TextBuf tampon, bool minuteurs)
+{
+    const Catalogue *c = v->catalogue;
+    float lh = dessin_hauteur_ligne();
+    char tmp[128];
+
+    photo_ecran_dessiner();
+
+    C2D_DrawRectSolid(0, 0, 0.5f, HAUT_LARGEUR, 26, VOILE);
+    snprintf(tmp, sizeof(tmp), "%d recette%s", c->nb, c->nb > 1 ? "s" : "");
+    dessin_texte(tampon, "Menu de la semaine", MARGE, 5, 0.5f, C_TEXTE, 0);
+    dessin_texte(tampon, tmp, HAUT_LARGEUR - MARGE, 5, 0.5f, C_TEXTE, C2D_AlignRight);
+
+    if (message.nb_lignes) {
+        float h = message.nb_lignes * lh * 0.45f + 6;
+        C2D_DrawRectSolid(0, 26, 0.5f, HAUT_LARGEUR, h, VOILE);
+        u32 couleur = v->message_erreur || (!v->message[0] && c->nb_illisibles) ? C_ACCENT : C_TEXTE;
+        for (int i = 0; i < message.nb_lignes; i++)
+            dessin_texte(tampon, message.lignes[i], MARGE, 29 + i * lh * 0.45f, 0.45f, couleur, 0);
+    }
+
+    if (v->titre_photo_pour != v->selection) {
+        mep_ajuster(c->entrees[v->selection].titre, HAUT_LARGEUR - 2 * MARGE, 52, lh,
+                    ECHELLES_TITRE_PHOTO, 4, dessin_mesure, NULL, &v->titre_photo);
+        v->titre_photo_pour = v->selection;
+    }
+    float h_titre = v->titre_photo.nb_lignes * lh * v->titre_photo.echelle;
+    float hauteur = h_titre + 26;
+    float y0 = (minuteurs ? BANDEAU_Y : 240) - hauteur;
+    C2D_DrawRectSolid(0, y0, 0.5f, HAUT_LARGEUR, hauteur, VOILE);
+    for (int i = 0; i < v->titre_photo.nb_lignes; i++)
+        dessin_texte(tampon, v->titre_photo.lignes[i], MARGE,
+                     y0 + 3 + i * lh * v->titre_photo.echelle, v->titre_photo.echelle, C_TEXTE, 0);
+    texte_infos(&c->entrees[v->selection], tmp, sizeof(tmp));
+    dessin_texte(tampon, tmp, MARGE, y0 + h_titre + 5, 0.5f, C_ACCENT, 0);
+}
+
 static void dessiner_haut(VueListe *v, C2D_TextBuf tampon)
 {
     const Catalogue *c = v->catalogue;
@@ -213,10 +258,24 @@ void vl_dessiner(VueListe *v, C2D_TextBuf tampon, C3D_RenderTarget *haut, C3D_Re
                  const Minuterie *minuterie, uint64_t maintenant)
 {
     if (v->a_preparer) preparer(v);
+    const Catalogue *c = v->catalogue;
+
+    /* Photo de la sélection, une fois que la sélection ne bouge plus. */
+    if (v->selection != v->selection_vue) {
+        v->selection_vue = v->selection;
+        v->selection_depuis = maintenant;
+        v->avec_photo = false;
+        v->photo_pour = -1;
+    }
+    if (c->nb && v->photo_pour != v->selection && maintenant - v->selection_depuis >= PHOTO_DELAI_MS) {
+        v->avec_photo = photo_ecran_charger(DOSSIER_RECETTES, c->entrees[v->selection].id);
+        v->photo_pour = v->selection;
+    }
 
     C2D_TargetClear(haut, C_FOND);
     C2D_SceneBegin(haut);
-    dessiner_haut(v, tampon);
+    if (c->nb && v->avec_photo) dessiner_haut_photo(v, tampon, minuterie_active(minuterie));
+    else dessiner_haut(v, tampon);
     vm_bandeau(tampon, minuterie, maintenant);   /* les minuteurs restent visibles */
 
     C2D_TargetClear(bas, C_FOND);

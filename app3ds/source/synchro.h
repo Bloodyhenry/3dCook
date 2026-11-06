@@ -6,6 +6,9 @@
  *      (on cuisine alors hors ligne avec ce qui est déjà sur la carte) ;
  *   2. pour chaque recette du menu : si le fichier local a la même « rev »,
  *      rien à faire ; sinon GET /recipes/<id>, vérification, écriture atomique ;
+ *      puis sa photo (GET /recipes/<id>/image.rgb565) si la recette vient
+ *      d'être téléchargée ou si la photo manque ; une photo qui échoue ne
+ *      bloque jamais la recette ;
  *   3. les recettes qui ne sont plus au menu sont retirées du cache.
  *
  * Une recette qui ne se télécharge pas, ou qui arrive abîmée, ne remplace
@@ -33,12 +36,21 @@ typedef struct {
     int  a_jour;           /* déjà présentes avec la bonne version */
     int  echecs;
     int  supprimees;       /* retirées du cache (plus au menu) */
+    int  photos;           /* photos téléchargées */
+    int  photos_echecs;    /* photos non reçues (la recette reste utilisable) */
     char erreur[200];      /* première erreur rencontrée, "" sinon */
 } BilanSynchro;
 
 void synchroniser(const char *adresse, const char *dossier_cache, const char *chemin_menu,
                   FonctionTelecharger telecharger, FonctionProgres progres, void *contexte,
                   BilanSynchro *bilan);
+
+/*
+ * Message d'erreur renvoyé par la passerelle ({"erreur": "…"}) dans le corps
+ * d'une réponse non 200, ex. « Mealie refuse le jeton d'API ». Renvoie false
+ * si le corps n'en contient pas.
+ */
+bool synchro_erreur_passerelle(const char *corps, int longueur, char *sortie, int taille);
 
 /* Résumé d'une ligne pour l'écran (« 3 recettes téléchargées, 2 à jour »). */
 void synchro_resume(const BilanSynchro *b, char *sortie, int taille);

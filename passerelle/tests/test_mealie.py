@@ -85,6 +85,7 @@ class FauxMealie(BaseHTTPRequestHandler):
     """Imite les routes de Mealie utilisées par la passerelle."""
     recettes: dict = {}
     planning: list = []
+    favoris: list = []
     image_webp: bytes = b""
     appels: list = []
 
@@ -104,6 +105,8 @@ class FauxMealie(BaseHTTPRequestHandler):
         FauxMealie.appels.append((url.path, parse_qs(url.query)))
         if self.headers.get("Authorization") != f"Bearer {JETON}":
             return self._json(401, {"detail": "Not authenticated"})
+        if url.path == "/api/users/self/favorites":
+            return self._json(200, {"ratings": self.favoris})
         if url.path == "/api/households/mealplans":
             return self._json(200, {"page": 1, "per_page": 200, "total": len(self.planning),
                                     "total_pages": 1, "items": self.planning})
@@ -200,7 +203,8 @@ class TestSourceMealie(unittest.TestCase):
         url_mealie = f"http://127.0.0.1:{cls.mealie.server_address[1]}"
 
         cls.source = SourceMealie(url_mealie, JETON, cls.tmp / "data", jours=7,
-                                  lien="http://nas:9925", aujourd_hui=lambda: dt.date(2026, 11, 6))
+                                  lien="http://nas:9925", aujourd_hui=lambda: dt.date(2026, 11, 6),
+                                  menu="planning")
         cls.serveur = creer_serveur(cls.source, "127.0.0.1", 0)
         cls.url = f"http://127.0.0.1:{cls.serveur.server_address[1]}"
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
@@ -273,9 +277,33 @@ class TestSourceMealie(unittest.TestCase):
         code, brut = self.requete("GET", "/api/info")
         info = json.loads(brut)
         info.pop("adresse_3ds")   # dépend de la machine de test
+        self.assertRegex(info.pop("code"), r"^[0-9a-f]{10}$")
         self.assertEqual(info, {"source": "Mealie", "lien": "http://nas:9925",
                                             "menu_modifiable": False, "corrections": False,
-                                            "recherche": False})
+                                            "recherche": False, "menu": "planning"})
+
+    def test_menu_depuis_les_favoris(self):
+        FauxMealie.favoris = [
+            {"recipeId": ID_ACRAS, "rating": None, "isFavorite": True},
+            {"recipeId": ID_CAKE, "rating": 4, "isFavorite": True},
+            {"recipeId": ID_CAKE, "rating": 4, "isFavorite": True},          # doublon
+            {"recipeId": "99999999-0000-4000-8000-000000000000", "isFavorite": True},  # disparue
+        ]
+        favoris = SourceMealie(self.url_mealie, JETON, self.tmp / "d4")      # « favoris » par défaut
+        self.assertEqual(favoris.info()["menu"], "favoris")
+        menu = favoris.menu()
+        # Triés par titre sans accents (« Acras », puis « Cake »), sans doublon ni recette disparue,
+        # et sans jour ni repas (ce ne sont pas des repas planifiés).
+        self.assertEqual([r["titre"] for r in menu["recettes"]], ["Acras de poisson", "Cake"])
+        self.assertEqual(set(menu["recettes"][0]), {"id", "titre", "rev", "image"})
+        self.assertEqual(menu["recettes"][0]["id"], ID_ACRAS.replace("-", ""))
+        self.assertGreater(menu["maj"], 0)
+        FauxMealie.favoris = []
+        self.assertEqual(favoris.menu()["recettes"], [])
+
+    def test_menu_mealie_invalide(self):
+        with self.assertRaises(ValueError):
+            SourceMealie(self.url_mealie, JETON, self.tmp / "d5", menu="semaine")
 
     def test_mealie_injoignable_ou_jeton_refuse(self):
         eteint = SourceMealie("http://127.0.0.1:9", JETON, self.tmp / "d2")

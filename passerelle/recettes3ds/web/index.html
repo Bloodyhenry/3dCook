@@ -278,9 +278,12 @@ function afficherSource() {
   }
   $("zone-recherche").hidden = !info.recherche;
   if (!info.menu_modifiable) {
-    // Menu tiré du planning de repas de la source (Mealie).
+    // Menu tiré de la source (Mealie) : favoris (cœur) ou planning de repas.
     const p = $("source-info");
-    p.textContent = "Le menu vient du planning de " + info.source + ". ";
+    p.textContent = info.menu === "planning"
+      ? "Le menu vient du planning de " + info.source + ". "
+      : "Le menu de la console : tes recettes favorites (cœur) dans " + info.source
+        + ". Cherche une recette dans " + info.source + " et touche son cœur pour l'ajouter. ";
     if (info.lien) {
       const a = el("a", "", "Ouvrir " + info.source);
       a.href = info.lien;

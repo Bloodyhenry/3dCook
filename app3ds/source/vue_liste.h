@@ -1,8 +1,9 @@
 /*
  * Vue « liste » : le menu de la semaine (recettes gardées sur la carte SD).
  *
- * Écran du haut : titre de la recette sélectionnée en grand, son jour et son
- * repas, l'état de la dernière synchronisation et l'adresse de la passerelle.
+ * Écran du haut : la photo de la recette sélectionnée (si elle en a une),
+ * avec son titre, son jour et son repas en surimpression ; sinon le titre en
+ * grand. Puis l'état de la dernière synchronisation et l'adresse de la passerelle.
  * Écran du bas : une ligne par recette (toucher = ouvrir), boutons de page,
  * « Synchro » (télécharger le menu) et « Réglages » (adresse, micro).
  *
@@ -33,6 +34,15 @@ typedef struct {
     Paragraphe titre;
     char message[300];              /* résultat de synchro ou erreur, "" sinon */
     bool message_erreur;            /* message en orange (sinon en gris) */
+
+    /* Photo : chargée quand la sélection ne bouge plus depuis un instant,
+     * pour que le défilement de la liste reste fluide. */
+    int      selection_vue;         /* sélection de l'image précédente */
+    uint64_t selection_depuis;
+    int      photo_pour;            /* sélection dont la photo a été cherchée, -1 sinon */
+    bool     avec_photo;
+    Paragraphe titre_photo;         /* titre en surimpression sur la photo */
+    int      titre_photo_pour;
 } VueListe;
 
 void vl_init(VueListe *v, const Catalogue *catalogue, const char *adresse);
