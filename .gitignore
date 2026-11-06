@@ -1,0 +1,14 @@
+# --- Contenu privé : base de recettes d'origine, à ne jamais publier ---
+/recettes/
+
+# --- macOS ---
+.DS_Store
+
+# --- Secrets ---
+.env
+!.env.exemple
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/

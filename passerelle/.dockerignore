@@ -1,0 +1,10 @@
+.venv
+data
+data-dev
+tests
+outils
+**/__pycache__
+mealie-data
+.env
+*.zip
+sd

@@ -1,0 +1,13 @@
+# Sorties de compilation 3DS
+build/
+*.3dsx
+*.smdh
+*.elf
+*.map
+
+# Binaires des tests (compilés pour le Mac) : on garde seulement les sources
+tests/test_*
+!tests/test_*.c
+tests/verifier_dossier
+tests/synchro_hote
+tests/*.dSYM/

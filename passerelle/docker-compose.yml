@@ -1,0 +1,55 @@
+# Mealie + passerelle 3DS sur le Synology (Container Manager → Projet).
+#
+# 1. Copier le CONTENU de passerelle/ directement dans /volume1/docker/recettes3ds/
+#    (Dockerfile et .env doivent être à côté de ce fichier)
+# 2. Copier .env.exemple en .env et renseigner NAS_ADRESSE
+# 3. Créer le projet sur ce dossier ; Mealie répond sur http://NAS_ADRESSE:9925
+# 4. Après avoir créé un jeton d'API dans Mealie, le mettre dans .env
+#    (MEALIE_JETON) et relancer le projet.
+# Détails : README.md
+services:
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:v3.30.0
+    container_name: mealie
+    restart: unless-stopped
+    ports:
+      - "9925:9000"
+    deploy:
+      resources:
+        limits:
+          memory: 1000M
+    volumes:
+      # Base SQLite et photos de Mealie dans un volume Docker nommé : un dossier
+      # partagé Synology (ACL) refuse l'écriture à l'utilisateur du conteneur.
+      # Sauvegardes : Mealie → Admin → Sauvegardes.
+      - mealie-data:/app/data
+    environment:
+      ALLOW_SIGNUP: "false"
+      # Utilisateur sous lequel tourne Mealie dans le conteneur.
+      PUID: ${PUID:-1026}
+      PGID: ${PGID:-100}
+      TZ: Europe/Paris
+      BASE_URL: http://${NAS_ADRESSE}:9925
+
+  recettes3ds:
+    build: .
+    image: recettes3ds:latest
+    container_name: recettes3ds
+    restart: unless-stopped
+    depends_on:
+      - mealie
+    ports:
+      - "8383:8383"
+    volumes:
+      # Menu, corrections et cache des photos de la passerelle.
+      - ./data:/data
+    environment:
+      # Adresse interne : les deux conteneurs se parlent par leur nom.
+      MEALIE_URL: http://mealie:9000
+      MEALIE_JETON: ${MEALIE_JETON}
+      MEALIE_LIEN: http://${NAS_ADRESSE}:9925
+      MENU_JOURS: ${MENU_JOURS:-7}
+      TZ: Europe/Paris
+
+volumes:
+  mealie-data:

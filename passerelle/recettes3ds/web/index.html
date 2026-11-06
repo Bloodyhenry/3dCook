@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Menu de la semaine</title>
+<style>
+  /* Page volontairement simple : un seul fichier, aucune dépendance. */
+  :root {
+    --fond: #faf8f5; --carte: #ffffff; --texte: #2b2620; --doux: #7a7066;
+    --accent: #c4572e; --accent-texte: #ffffff; --bord: #e6e0d8; --ok: #3d7a4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #1c1a17; --carte: #26231f; --texte: #ece6dd; --doux: #a59b8f;
+      --accent: #e0774c; --accent-texte: #1c1a17; --bord: #3a352f; --ok: #6fb581;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fond); color: var(--texte);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.4rem; margin: 4px 0 16px; }
+  h2 { font-size: 1.05rem; margin: 24px 0 8px; color: var(--doux); font-weight: 600; }
+  input[type=search], input[type=number], input[type=text] {
+    width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: 10px;
+    border: 1px solid var(--bord); background: var(--carte); color: var(--texte);
+  }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li.recette {
+    background: var(--carte); border: 1px solid var(--bord); border-radius: 12px;
+    margin-bottom: 8px; overflow: hidden;
+  }
+  .ligne { display: flex; align-items: center; gap: 12px; padding: 8px; cursor: pointer; }
+  .ligne img, .ligne .vide {
+    width: 64px; height: 48px; object-fit: cover; border-radius: 8px; flex: none;
+    background: var(--bord);
+  }
+  .infos { flex: 1; min-width: 0; }
+  .titre { font-weight: 600; overflow-wrap: anywhere; }
+  .meta { font-size: .85rem; color: var(--doux); }
+  a { color: var(--accent); }
+  .adresse { background: var(--carte); border: 1px solid var(--bord); border-radius: 10px;
+             padding: 10px 12px; font-size: .95rem; overflow-wrap: anywhere; }
+  button {
+    font: inherit; border: none; border-radius: 10px; padding: 10px 14px;
+    background: var(--accent); color: var(--accent-texte); cursor: pointer; flex: none;
+  }
+  button.secondaire { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button:disabled { opacity: .5; }
+  .detail { border-top: 1px solid var(--bord); padding: 12px; font-size: .95rem; }
+  .detail ol { padding-left: 20px; margin: 8px 0; }
+  .detail ul.ingr li { padding: 2px 0; }
+  .allergene { color: var(--accent); font-weight: 600; }
+  .minuteur { color: var(--ok); font-weight: 600; }
+  .portions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .portions input[type=number] { width: 80px; }
+  .portions input[type=text] { width: 160px; flex: 1; }
+  .vide-msg { color: var(--doux); padding: 8px 0; }
+  .erreur { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Menu de la semaine</h1>
+  <p id="source-info" class="meta" hidden></p>
+  <p id="adresse-3ds" class="adresse" hidden></p>
+  <ul id="menu"></ul>
+  <p id="menu-vide" class="vide-msg" hidden>Aucune recette au menu.</p>
+
+  <section id="zone-recherche" hidden>
+    <h2>Chercher dans la base</h2>
+    <input id="q" type="search" placeholder="Titre ou ingrédient : courgette, cake…" autocomplete="off">
+    <p id="compte" class="meta"></p>
+    <ul id="resultats"></ul>
+  </section>
+  <p id="erreur" class="erreur" hidden></p>
+</main>
+
+<script>
+"use strict";
+// Petite page de gestion du menu. Tout le texte est inséré avec textContent
+// (jamais innerHTML) pour ne pas interpréter le contenu des recettes.
+
+const $ = (id) => document.getElementById(id);
+let menuIds = new Set();
+// Ce que permet la source (export JSON ou Mealie) : voir GET /api/info.
+let info = { menu_modifiable: false, corrections: false, recherche: false };
+
+async function api(methode, chemin, corps) {
+  const options = { method: methode, headers: {} };
+  if (corps !== undefined) {
+    options.headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(corps);
+  }
+  const rep = await fetch(chemin, options);
+  const donnees = await rep.json();
+  if (!rep.ok) throw new Error(donnees.erreur || rep.statusText);
+  $("erreur").hidden = true;
+  return donnees;
+}
+
+function montrerErreur(e) {
+  $("erreur").textContent = "Erreur : " + e.message;
+  $("erreur").hidden = false;
+}
+
+function el(tag, classe, texte) {
+  const n = document.createElement(tag);
+  if (classe) n.className = classe;
+  if (texte !== undefined) n.textContent = texte;
+  return n;
+}
+
+function texteDate(iso) {
+  const d = new Date(iso + "T12:00:00");
+  return isNaN(d) ? iso : d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
+}
+
+function texteMeta(r) {
+  const morceaux = [];
+  if (r.date) morceaux.push(texteDate(r.date) + (r.repas ? " · " + r.repas : ""));
+  if (r.echelle && r.echelle !== 1) morceaux.push("×" + String(r.echelle).replace(".", ","));
+  if (r.portions) morceaux.push(r.portions.nombre + " " + r.portions.unite);
+  if (r.nb_etapes !== undefined) morceaux.push(r.nb_etapes + " étape" + (r.nb_etapes > 1 ? "s" : ""));
+  if (r.nb_minuteurs) morceaux.push(r.nb_minuteurs + " minuteur" + (r.nb_minuteurs > 1 ? "s" : ""));
+  return morceaux.join(" · ");
+}
+
+function formaterItem(i) {
+  if (i.quantite === null) return i.nom;
+  let t = String(i.quantite).replace(".", ",");
+  if (i.quantite_max) t += "-" + String(i.quantite_max).replace(".", ",");
+  if (i.unite) t += " " + i.unite;
+  return t + " " + i.nom;
+}
+
+// Détail d'une recette : aperçu de ce que verra la 3DS + correction des portions.
+async function afficherDetail(li, id) {
+  const existant = li.querySelector(".detail");
+  if (existant) { existant.remove(); return; }
+  const zone = el("div", "detail", "Chargement…");
+  li.appendChild(zone);
+  try {
+    remplirDetail(zone, await api("GET", "/recipes/" + encodeURIComponent(id)));
+  } catch (e) { zone.textContent = "Erreur : " + e.message; }
+}
+
+function remplirDetail(zone, r) {
+  zone.textContent = "";
+  if (r.portions) zone.appendChild(el("p", "meta", "Pour " + r.portions.nombre + " " + r.portions.unite));
+  if (info.corrections) zone.appendChild(blocPortions(zone, r));
+  remplirContenu(zone, r);
+}
+
+// Portions : détectées automatiquement, corrigeables ici (source export JSON).
+function blocPortions(zone, r) {
+  const bloc = el("div", "portions");
+  bloc.appendChild(el("span", "", "Portions :"));
+  const nb = el("input"); nb.type = "number"; nb.min = 1; nb.max = 200;
+  nb.value = r.portions ? r.portions.nombre : "";
+  nb.placeholder = "?";
+  const unite = el("input"); unite.type = "text";
+  unite.value = r.portions ? r.portions.unite : ""; unite.placeholder = "personnes, muffins…";
+  const enreg = el("button", "", "Enregistrer");
+  enreg.onclick = async () => {
+    const n = parseInt(nb.value, 10);
+    const corps = { portions: n ? { nombre: n, unite: unite.value.trim() || "portions" } : null };
+    try { remplirDetail(zone, await api("PUT", "/api/corrections/" + encodeURIComponent(r.id), corps)); }
+    catch (e) { montrerErreur(e); }
+  };
+  const auto = el("button", "secondaire", "Auto");
+  auto.title = "Revenir à la détection automatique";
+  auto.onclick = async () => {
+    try { remplirDetail(zone, await api("PUT", "/api/corrections/" + encodeURIComponent(r.id), { portions: null })); }
+    catch (e) { montrerErreur(e); }
+  };
+  bloc.append(nb, unite, enreg, auto);
+  return bloc;
+}
+
+function remplirContenu(zone, r) {
+  for (const g of r.groupes) {
+    if (g.titre) zone.appendChild(el("strong", "", g.titre));
+    const ul = el("ul", "ingr");
+    for (const i of g.items) {
+      const l = el("li", i.allergene ? "allergene" : "", "• " + formaterItem(i));
+      ul.appendChild(l);
+    }
+    zone.appendChild(ul);
+  }
+
+  const ol = el("ol");
+  r.etapes.forEach((e, n) => {
+    const l = el("li");
+    if (e.section) l.appendChild(el("strong", "", e.section + " : "));
+    l.appendChild(document.createTextNode(e.texte));
+    for (const m of r.minuteurs.filter((m) => m.etape === n)) {
+      l.appendChild(el("div", "minuteur", "⏱ " + m.libelle));
+    }
+    ol.appendChild(l);
+  });
+  zone.appendChild(ol);
+  for (const n of r.notes) zone.appendChild(el("p", "meta", n));
+}
+
+function ligneRecette(r) {
+  const li = el("li", "recette");
+  const ligne = el("div", "ligne");
+  if (r.image) {
+    const img = el("img"); img.loading = "lazy"; img.alt = "";
+    img.src = "/recipes/" + encodeURIComponent(r.id) + "/image";
+    ligne.appendChild(img);
+  } else {
+    ligne.appendChild(el("div", "vide"));
+  }
+  const infos = el("div", "infos");
+  infos.appendChild(el("div", "titre", r.titre));
+  infos.appendChild(el("div", "meta", texteMeta(r)));
+  ligne.appendChild(infos);
+
+  if (info.menu_modifiable) {
+    const dans = menuIds.has(r.id);
+    const bouton = el("button", dans ? "secondaire" : "", dans ? "Retirer" : "Ajouter");
+    bouton.onclick = async (ev) => {
+      ev.stopPropagation();
+      bouton.disabled = true;
+      try {
+        const menu = await api(dans ? "DELETE" : "PUT", "/api/menu/" + encodeURIComponent(r.id));
+        afficherMenu(menu);
+        chercher();
+      } catch (e) { montrerErreur(e); bouton.disabled = false; }
+    };
+    ligne.appendChild(bouton);
+  }
+  ligne.onclick = () => afficherDetail(li, r.id);
+  li.appendChild(ligne);
+  return li;
+}
+
+function afficherMenu(menu) {
+  menuIds = new Set(menu.recettes.map((r) => r.id));
+  const ul = $("menu");
+  ul.textContent = "";
+  for (const r of menu.recettes) ul.appendChild(ligneRecette(r));
+  $("menu-vide").hidden = menu.recettes.length > 0;
+}
+
+let delai = null;
+let numeroRequete = 0;
+async function chercher() {
+  const n = ++numeroRequete;
+  try {
+    const rep = await api("GET", "/api/recherche?q=" + encodeURIComponent($("q").value) + "&limite=60");
+    if (n !== numeroRequete) return;   // une recherche plus récente est partie
+    $("compte").textContent = rep.total + " recette" + (rep.total > 1 ? "s" : "") +
+      (rep.total > rep.resultats.length ? " (" + rep.resultats.length + " affichées)" : "");
+    const ul = $("resultats");
+    ul.textContent = "";
+    for (const r of rep.resultats) ul.appendChild(ligneRecette(r));
+  } catch (e) { montrerErreur(e); }
+}
+
+$("q").addEventListener("input", () => {
+  clearTimeout(delai);
+  delai = setTimeout(chercher, 250);
+});
+
+function afficherSource() {
+  if (info.adresse_3ds) {
+    // Adresse à saisir sur la console (Réglages de l'appli 3DS).
+    const p = $("adresse-3ds");
+    p.textContent = "Adresse à saisir sur la 3DS : ";
+    p.appendChild(el("strong", "", info.adresse_3ds));
+    p.hidden = false;
+  }
+  $("zone-recherche").hidden = !info.recherche;
+  if (!info.menu_modifiable) {
+    // Menu tiré du planning de repas de la source (Mealie).
+    const p = $("source-info");
+    p.textContent = "Le menu vient du planning de " + info.source + ". ";
+    if (info.lien) {
+      const a = el("a", "", "Ouvrir " + info.source);
+      a.href = info.lien;
+      p.appendChild(a);
+    }
+    p.hidden = false;
+  }
+}
+
+api("GET", "/api/info")
+  .then((i) => { info = i; afficherSource(); })
+  .then(() => api("GET", "/menu"))
+  .then(afficherMenu)
+  .then(() => { if (info.recherche) chercher(); })
+  .catch(montrerErreur);
+</script>
+</body>
+</html>

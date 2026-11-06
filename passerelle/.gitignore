@@ -1,0 +1,9 @@
+.venv/
+data/
+data-dev/
+__pycache__/
+mealie-data/
+.env
+local.mk
+*.zip
+sd/
